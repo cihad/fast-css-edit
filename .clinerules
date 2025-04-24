@@ -1,0 +1,87 @@
+<About-Extension>
+  Bir vscode extensionuna ihtiyacım var. Extensionun adı Fast CSS Edit. Bu extension bir React dosyasında (jsx or tsx) className'de css class'ının (örnek class: btn) üzerine gelince direk css tanımlamasını düzenlemeye yarayan, kullanıcıya dosyalar arasında geçiş yapmasına gerek kalmadan pratik ve kolay bir kullanım sunan bir VSCode extensionudur.
+
+  <style_file_detection_flow>
+    1. React component dosyasında bir css dosyası import edilmişse css dosyası import edilen dosyadır;
+    2. React component dosyasında bir css dosyası import edilmemişse extensiondaki konfigürasyona göre sass, scss, css, module.css, module.scss, module.sass uzantılarını kullanarak bir style dosyası oluşturur. Bu konfigürasyon vscode için genel olabileceği gibi workspace için özelleştirilebilir. VSCode'a css extension bir select ile seçilebilir. Default olarak css extension'un değeri module.css'dir.
+
+    <examples>
+      <example id="example1">
+        <configure name="css-extension" extension="css" />
+        <file path="src/components/button/index.jsx">
+          export default function Button(props) {
+            return <button className="btn" {...props} />
+          }
+        </file>
+        <file path="src/components/button/index.css" create="true">
+          .btn {
+            apperance: none;
+            border: 1px solid;
+          }
+        </file>
+        </example>
+
+        <example id="example2">
+          <configure name="css-extension" extension="module.scss" />
+          <file path="src/components/button/index.jsx">
+            import styles from "./index.modules.scss";
+            export default function Button(props) {
+              return <button className={styles.btn} {...props} />
+            }
+          </file>
+          <file path="src/components/button/index.module.css">
+            .btn {
+              apperance: none;
+              border: 1px solid;
+            }
+          </file>
+      </example>
+    </examples>
+
+  </style_file_detection_flow>
+
+  <style_file_name_instructions>
+    Eğer yukarıdaki <style_file_detection_flow> göre bir style dosyası bulunamamışsa style dosyasının adı default olarak react component dosyasının adı olur. Bu extension konfigürasyonundan ayarlanabilir.
+  </style_file_name_instructions>
+
+  <class_name_detection>
+    class name:
+
+      - css, sass, scss için: btn
+      - module.css, module.sass, module.scss için: styles.btn
+
+    olabilir.
+
+    Bu sebeple bunun için de konfigure edilebilir bir ayar olması gerekir. Kullanıcı bir regex veya senin uygun gördüğün başka bir yapıda ayar girebilir.
+  </class_name_detection>
+
+  <style_editing_instructions>
+    component dosyasında veya html dosyasında css class adının CTRL+Click ile Code lens kullanarak bu class tanımlamasını düzenler. Bu kod penceresinde örnek: button.css
+
+    Code lens'teki css dosyası içerisinde örnek olarak .btn class'ı varsa bu .btn'nin olduğu satıra scroll yapar. Bu .btn class'ı yoksa dosyanın sonuna bu class'ı aşağıdaki gibi oluşturur:
+
+    ```
+    .btn {
+
+    }
+    ```
+
+    ve bu oluşturulan class'a scroll yapar.
+  </style_editing_instructions>
+
+  <removing_css_class>
+    Daha iyi bir kullanıcı deneyimi için Ctrl+Shift+D gibi bir tuş kombinasyonu ile css class'ı silinmelidir.
+
+    1. className="abc def" burada örneğin def silinince className="abc" olmali
+    2. style dosyasında css tanımlaması silinmelidir.
+  </removing_css_class>
+
+  <hover_provider>
+    css class üzerine gelince css tanımlaması popup ile görünmeli.
+
+    bu popup Delete diye bir tane buton konulmalı ve bu buton css dosyasında css tanınlamasını ve aynı sayfadaki css class'ını silmeli.
+  </hover_provider>
+
+</About-Extension>
+
+- Yorum satırları kullanma

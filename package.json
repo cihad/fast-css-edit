@@ -9,13 +9,66 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:javascriptreact",
+    "onLanguage:typescriptreact",
+    "onLanguage:html",
+    "onCommand:fast-css-edit.deleteCssRule"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Fast CSS Edit",
+      "properties": {
+        "fast-css-edit.defaultStyleExtension": {
+          "type": "string",
+          "enum": [
+            "css",
+            "scss",
+            "sass",
+            "module.css",
+            "module.scss",
+            "module.sass"
+          ],
+          "default": "module.css",
+          "description": "Default extension for the style file to look for or create if no import is found."
+        },
+        "fast-css-edit.styleFileNamingConvention": {
+          "type": "string",
+          "default": "{componentName}",
+          "description": "Naming convention for the style file when no import is found. Use {componentName} as a placeholder."
+        },
+        "fast-css-edit.cssModuleIdentifier": {
+          "type": "string",
+          "default": "styles",
+          "description": "The common identifier used when importing CSS Modules (e.g., 'styles' in 'import styles from ...')."
+        },
+        "fast-css-edit.enableFileCreation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically create the style file if it doesn't exist."
+        },
+        "fast-css-edit.classNameExtractionRegex": {
+          "type": "string",
+          "default": "",
+          "description": "(Optional) Advanced Regex to extract class names from className/class attributes. Leave empty for default behavior. Ensure capture groups match expectations if used."
+        }
+      }
+    },
     "commands": [
       {
-        "command": "fast-css-edit.helloWorld",
-        "title": "Hello World"
+        "command": "fast-css-edit.removeClass",
+        "title": "Fast CSS Edit: Remove Class and Definition"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "fast-css-edit.removeClass",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "editorTextFocus"
       }
     ]
   },
