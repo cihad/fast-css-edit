@@ -12,10 +12,50 @@ export interface ClassAttributeDetails {
   isModule: boolean;
   moduleIdentifier?: string;
   range: vscode.Range;
+  isLocalObject?: boolean;
 }
 
 export function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function calculateRangeToDeleteClass(
+  document: vscode.TextDocument,
+  classRange: vscode.Range
+): vscode.Range {
+  let rangeToDelete = classRange;
+  let removedSpace = false;
+
+  if (classRange.start.character > 0) {
+    const charBeforePos = classRange.start.translate(0, -1);
+    const rangeBefore = new vscode.Range(charBeforePos, classRange.start);
+    if (document.getText(rangeBefore) === " ") {
+      rangeToDelete = new vscode.Range(rangeBefore.start, classRange.end);
+      removedSpace = true;
+      console.log("[Fast CSS Edit] Including preceding space in deletion.");
+    }
+  }
+
+  if (!removedSpace) {
+    const charAfterPos = classRange.end;
+    const rangeAfter = new vscode.Range(
+      charAfterPos,
+      charAfterPos.translate(0, 1)
+    );
+    if (
+      rangeAfter.end.isBeforeOrEqual(
+        document.lineAt(rangeAfter.end.line).range.end
+      )
+    ) {
+      if (document.getText(rangeAfter) === " ") {
+        rangeToDelete = new vscode.Range(classRange.start, rangeAfter.end);
+        removedSpace = true;
+        console.log("[Fast CSS Edit] Including trailing space in deletion.");
+      }
+    }
+  }
+
+  return rangeToDelete;
 }
 
 function getPositionAt(text: string, offset: number): vscode.Position {
@@ -75,6 +115,8 @@ export function findClassAttributeDetails(
 
   const stringAttrRegex = /(class(?:Name)?)\s*=\s*(["'])(.*?)\2/g;
   const moduleAttrRegex = /(className)\s*=\s*\{(.*?)\}/g;
+  const clsxCallRegex = /(className)\s*=\s*\{clsx\((.*?)\)\}/g;
+  const templateLiteralRegex = /(className)\s*=\s*\{`([^`]+)`\}/g;
 
   let potentialMatch: ClassAttributeDetails | undefined = undefined;
 
@@ -137,6 +179,129 @@ export function findClassAttributeDetails(
       console.log(
         `[Fast CSS Edit] Position ${position.character} is outside the value range ${valueStartIndex}-${valueEndIndex}.`
       );
+    }
+  }
+
+  if (!potentialMatch) {
+    while ((match = templateLiteralRegex.exec(lineText)) !== null) {
+      if (potentialMatch) {
+        break;
+      }
+
+      const attrName = match[1];
+      const templateContent = match[2];
+      const attrStartIndex = match.index;
+      const valueStartIndex = attrStartIndex + attrName.length + 2; // for ={`
+      const valueEndIndex = attrStartIndex + match[0].length - 1; // for `}
+
+      console.log(
+        `[Fast CSS Edit] Found template literal attribute: ${attrName}={\`${templateContent}\`} (Value range: ${valueStartIndex}-${valueEndIndex})`
+      );
+
+      if (
+        position.character >= valueStartIndex &&
+        position.character <= valueEndIndex
+      ) {
+        console.log(
+          `[Fast CSS Edit] Position ${position.character} is inside the template literal value range.`
+        );
+
+        // We need to parse the templateContent to find plain classes and module expressions
+        // Split by ${...} to separate static and dynamic parts
+        const parts = templateContent.split(/\$\{([^}]+)\}/g);
+
+        let cumulativeIndex = valueStartIndex;
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          if (i % 2 === 0) {
+            // Static part - plain class names separated by whitespace
+            const classes = part.split(/\s+/).filter((cls) => cls.length > 0);
+            for (const cls of classes) {
+              const clsStart = cumulativeIndex + part.indexOf(cls);
+              const clsEnd = clsStart + cls.length;
+              if (
+                position.character >= clsStart &&
+                position.character <= clsEnd
+              ) {
+                const startPos = new vscode.Position(position.line, clsStart);
+                const endPos = new vscode.Position(position.line, clsEnd);
+                const wordRange = new vscode.Range(startPos, endPos);
+                potentialMatch = {
+                  className: cls,
+                  isModule: false,
+                  range: wordRange,
+                };
+                break;
+              }
+            }
+            cumulativeIndex += part.length;
+          } else {
+            // Dynamic part - expression inside ${...}
+            const expr = part.trim();
+            // Check if expression matches moduleIdentifier.className or moduleIdentifier['className']
+            const moduleDotMatch = expr.match(
+              new RegExp(`^${escapeRegExp(cssModuleIdentifier)}\\.([\\w_-]+)$`)
+            );
+            const moduleBracketMatch =
+              expr.match(
+                new RegExp(
+                  `^${escapeRegExp(cssModuleIdentifier)}\\['([\\w_-]+)'\\]$`
+                )
+              ) ||
+              expr.match(
+                new RegExp(
+                  `^${escapeRegExp(cssModuleIdentifier)}\\["([\\w_-]+)"\\]$`
+                )
+              );
+
+            if (moduleDotMatch) {
+              const actualClassName = moduleDotMatch[1];
+              const startPos = new vscode.Position(
+                position.line,
+                cumulativeIndex
+              );
+              const endPos = new vscode.Position(
+                position.line,
+                cumulativeIndex + expr.length
+              );
+              const wordRange = new vscode.Range(startPos, endPos);
+              potentialMatch = {
+                className: actualClassName,
+                isModule: true,
+                moduleIdentifier: cssModuleIdentifier,
+                range: wordRange,
+              };
+              break;
+            } else if (moduleBracketMatch) {
+              const actualClassName = moduleBracketMatch[1];
+              const startPos = new vscode.Position(
+                position.line,
+                cumulativeIndex
+              );
+              const endPos = new vscode.Position(
+                position.line,
+                cumulativeIndex + expr.length
+              );
+              const wordRange = new vscode.Range(startPos, endPos);
+              potentialMatch = {
+                className: actualClassName,
+                isModule: true,
+                moduleIdentifier: cssModuleIdentifier,
+                range: wordRange,
+              };
+              break;
+            }
+            cumulativeIndex += expr.length + 3; // +3 for ${ and }
+          }
+          if (potentialMatch) {
+            break;
+          }
+        }
+      } else {
+        console.log(
+          `[Fast CSS Edit] Position ${position.character} is outside the template literal value range ${valueStartIndex}-${valueEndIndex}.`
+        );
+      }
     }
   }
 
@@ -229,6 +394,80 @@ export function findClassAttributeDetails(
     }
   }
 
+  if (!potentialMatch) {
+    while ((match = clsxCallRegex.exec(lineText)) !== null) {
+      if (potentialMatch) {
+        break;
+      }
+
+      const attrName = match[1];
+      const clsxArgs = match[2];
+      const attrStartIndex = match.index;
+      const valueStartIndex = attrStartIndex + attrName.length + 2 + 6; // length of 'className={clsx('
+      const valueEndIndex = attrStartIndex + match[0].length - 1;
+
+      console.log(
+        `[Fast CSS Edit] Found clsx call: ${attrName}={clsx(${clsxArgs})} (Value range: ${valueStartIndex}-${valueEndIndex})`
+      );
+
+      if (
+        position.character >= valueStartIndex &&
+        position.character <= valueEndIndex
+      ) {
+        // Parse clsx arguments for string literals
+        const stringLiteralRegex = /(["'])(.*?)\1/g;
+        let argMatch;
+        while ((argMatch = stringLiteralRegex.exec(clsxArgs)) !== null) {
+          const classNameCandidate = argMatch[2];
+          const argStartIndex = valueStartIndex + argMatch.index + 1; // +1 to skip opening quote
+          const argEndIndex = argStartIndex + classNameCandidate.length;
+
+          if (
+            position.character >= argStartIndex &&
+            position.character <= argEndIndex
+          ) {
+            // Split the string literal by whitespace to get individual classes
+            const classes = classNameCandidate.split(/\s+/);
+            let cumulativeIndex = argStartIndex;
+
+            for (const cls of classes) {
+              const clsStart = cumulativeIndex;
+              const clsEnd = clsStart + cls.length;
+
+              if (
+                position.character >= clsStart &&
+                position.character <= clsEnd
+              ) {
+                const startPos = new vscode.Position(position.line, clsStart);
+                const endPos = new vscode.Position(position.line, clsEnd);
+                const wordRange = new vscode.Range(startPos, endPos);
+
+                console.log(
+                  `[Fast CSS Edit] Matched clsx individual class: "${cls}" at range ${clsStart}-${clsEnd}`
+                );
+
+                potentialMatch = {
+                  className: cls,
+                  isModule: false,
+                  range: wordRange,
+                };
+                break;
+              }
+              cumulativeIndex = clsEnd + 1; // +1 for the space
+            }
+            if (potentialMatch) {
+              break;
+            }
+          }
+        }
+      } else {
+        console.log(
+          `[Fast CSS Edit] Position ${position.character} is outside the clsx value range ${valueStartIndex}-${valueEndIndex}.`
+        );
+      }
+    }
+  }
+
   if (potentialMatch) {
     console.log(
       "[Fast CSS Edit] findClassAttributeDetails returning:",
@@ -256,11 +495,11 @@ export async function findStyleFile(
   const docName = path.basename(docPath, docExt);
 
   const moduleImportRegex = new RegExp(
-    `import\\s+(?:(?:\\*\\s+as\\s+(\\w+))|(\\w+)|(?:\\{\\s*.*\\s*\\}))\\s+from\\s+['"](\\.[./\\w-]+(\\.(?:css|scss|sass|less|styl)))['"]`,
+    `import\\s+(?:(?:\\*\\s+as\\s+(\\w+))|(\\w+)|(?:\\{\\s*.*\\s*\\}))\\s+from\\s+['"](\\.[./\\w-]+(\\.(?:css|scss|sass)))['"]`,
     "g"
   );
   const globalImportRegex =
-    /import\s+['"](\.[./\\w-]+(\.(?:css|scss|sass|less|styl)))['"]/g;
+    /import\s+['"](\.[./\\w-]+(\.(?:css|scss|sass)))['"]/g;
   const text = doc.getText();
   let match;
 
@@ -306,7 +545,11 @@ export async function findStyleFile(
   console.log(
     "[Fast CSS Edit] No matching import found. Determining path based on convention."
   );
-  const defaultExt = config.get<string>("defaultStyleExtension", "module.css");
+  const defaultExt = config.get<string>("defaultStyleExtension", "css");
+  const defaultModuleExt = config.get<string>(
+    "defaultModuleStyleExtension",
+    "css"
+  );
   const namingConvention = config.get<string>(
     "styleFileNamingConvention",
     "{componentName}"
@@ -315,17 +558,48 @@ export async function findStyleFile(
     "{componentName}",
     docName
   );
-  const styleFileName = conventionReplaced.endsWith(`.${defaultExt}`)
-    ? conventionReplaced
-    : `${conventionReplaced}.${defaultExt}`;
+
+  let styleFileName: string;
+  if (isModule) {
+    styleFileName = `${conventionReplaced}.module.${defaultModuleExt}`;
+  } else {
+    styleFileName = `${conventionReplaced}.${defaultExt}`;
+  }
+
   const stylePath = path.join(docDir, styleFileName);
   const styleUri = vscode.Uri.file(stylePath);
 
   console.log(
     `[Fast CSS Edit] Assuming style file based on convention: ${stylePath}`
   );
-  const defaultIsModule = defaultExt.includes(".module.");
-  return { uri: styleUri, className: className, isModule: defaultIsModule };
+  return { uri: styleUri, className: className, isModule: isModule };
+}
+
+export async function addImportIfMissing(
+  document: vscode.TextDocument,
+  editor: vscode.TextEditor,
+  importText: string,
+  isModuleImport: boolean,
+  importAlias?: string
+): Promise<void> {
+  const text = document.getText();
+  const importRegex = isModuleImport
+    ? new RegExp(`import\\s+${importAlias}\\s+from\\s+['"].+['"]`)
+    : new RegExp(`import\\s+['"].+['"]`);
+
+  if (importRegex.test(text)) {
+    // Import already exists
+    return;
+  }
+
+  const firstImportMatch = text.match(/import\s.+from\s.+;?/);
+  const insertPosition = firstImportMatch
+    ? document.positionAt(firstImportMatch.index || 0)
+    : new vscode.Position(0, 0);
+
+  await editor.edit((editBuilder) => {
+    editBuilder.insert(insertPosition, importText + "\n");
+  });
 }
 
 export async function findOrCreateClassRuleAndGetRange(
@@ -476,7 +750,13 @@ export async function getCssRuleContent(
   const match = ruleRegex.exec(fileContent);
 
   if (match) {
-    const fullRuleText = `.${className} {${match[2].trim()}}`;
+    const properties = match[2].trim();
+    const lines = properties
+      .split(";")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const formattedProperties = lines.map((line) => `  ${line};`).join("\n");
+    const fullRuleText = `.${className} {\n${formattedProperties}\n}`;
     console.log(`[Fast CSS Edit] Found rule content for .${className}`);
     return fullRuleText;
   } else {
@@ -502,6 +782,7 @@ async function findCssRuleRange(
     return undefined;
   }
 
+  // More flexible regex to match class rule start, allowing for newlines and comments
   const startRegex = new RegExp(
     `(^|\\s|\\})\\s*\\.${escapeRegExp(className)}\\s*\\{`,
     "m"

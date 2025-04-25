@@ -1,71 +1,69 @@
-# fast-css-edit README
+# Fast CSS Edit - VSCode Extension
 
-This is the README for your extension "fast-css-edit". After writing up a brief description, we recommend including the following sections.
+Fast CSS Edit is a Visual Studio Code extension designed to streamline and simplify the process of editing CSS class definitions directly from React component files. It enables developers to quickly navigate and modify CSS styles associated with class names in JSX or TSX files without switching between multiple files.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Direct CSS Editing from React Components**  
+  Hover over a CSS class name in a React component's `className` attribute to view its CSS definition in a popup.  
+  Edit the CSS rule directly within the popup for quick adjustments.
 
-For example if there is an image subfolder under your extension project workspace:
+- **Seamless Style File Detection**  
+  Automatically detects the relevant CSS or CSS module file based on import statements or naming conventions:
 
-\!\[feature X\]\(images/feature-x.png\)
+  1. If a CSS file is imported, it uses the last imported CSS file as the style source.
+  2. If multiple CSS files are imported, the last imported file is used.
+  3. If no CSS file is imported, it falls back to a style file named after the component (configurable).
+  4. Supports mixed usage of CSS and CSS modules, correctly resolving class names.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+- **Code Lens for Quick Navigation and Editing**  
+  Use Ctrl+Click on a CSS class name to jump directly to its definition in the style file.  
+  If the class does not exist, it will be created at the end of the style file and the editor will scroll to it.
 
-## Requirements
+- **CSS Class Deletion Shortcut**  
+  Press Ctrl+Shift+D to delete a CSS class from the component's `className` attribute and remove its definition from the style file, ensuring clean and maintainable styles.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- **Configurable Class Name Detection**  
+  Supports different class name patterns for CSS, Sass, SCSS, and CSS modules.  
+  Users can configure regex or other patterns to match their preferred coding style.
 
-## Extension Settings
+## Usage
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+1. Open a React component file (`.jsx` or `.tsx`) with CSS classes in the `className` attribute.
+2. Hover over a class name to see its CSS rule in a popup with an option to delete the class.
+3. Use Ctrl+Click on a class name to jump to or create its CSS definition in the style file.
+4. Use Ctrl+Shift+D to delete a class from both the component and the style file.
 
-For example:
+## Configuration
 
-This extension contributes the following settings:
+- **Style File Naming Convention**  
+  Configure the default style file name pattern used when no CSS import is found.
+- **CSS Module Identifier**  
+  Configure the identifier used for CSS modules (e.g., `styles`).
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## Example
 
-## Known Issues
+```jsx
+// src/components/button/index.jsx
+import styles from "./index.module.css";
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+export default function Button(props) {
+  return <button className={`base-button ${styles.btn}`} {...props} />;
+}
+```
 
-## Release Notes
+```css
+/* src/components/button/index.module.css */
+.btn {
+  appearance: none;
+  border: 1px solid;
+}
+```
 
-Users appreciate release notes as you update your extension.
+## Installation
 
-### 1.0.0
+Install the Fast CSS Edit extension from the Visual Studio Code Marketplace.
 
-Initial release of ...
+## License
 
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+MIT License

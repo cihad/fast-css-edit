@@ -27,13 +27,20 @@
           "enum": [
             "css",
             "scss",
-            "sass",
-            "module.css",
-            "module.scss",
-            "module.sass"
+            "sass"
           ],
-          "default": "module.css",
+          "default": "css",
           "description": "Default extension for the style file to look for or create if no import is found."
+        },
+        "fast-css-edit.defaultModuleStyleExtension": {
+          "type": "string",
+          "enum": [
+            "css",
+            "scss",
+            "sass"
+          ],
+          "default": "css",
+          "description": "Default extension for the CSS module style file to look for or create if no import is found."
         },
         "fast-css-edit.styleFileNamingConvention": {
           "type": "string",
@@ -61,11 +68,24 @@
       {
         "command": "fast-css-edit.removeClass",
         "title": "Fast CSS Edit: Remove Class and Definition"
+      },
+      {
+        "command": "fast-css-edit.deleteRuleAndClass",
+        "title": "FCE: Delete rule & class"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "fast-css-edit.deleteRuleAndClass",
+          "when": "editorTextFocus",
+          "group": "navigation@2"
+        }
+      ]
+    },
     "keybindings": [
       {
-        "command": "fast-css-edit.removeClass",
+        "command": "fast-css-edit.deleteRuleAndClass",
         "key": "ctrl+shift+d",
         "mac": "cmd+shift+d",
         "when": "editorTextFocus"

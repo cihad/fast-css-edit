@@ -54,17 +54,40 @@ export function activate(context: vscode.ExtensionContext) {
 
       const styleUri = vscode.Uri.file(args.styleUriFsPath);
       const componentUri = vscode.Uri.file(args.componentUriFsPath);
-      // Deserialize the plain object range back into a vscode.Range
-      const componentClassRange = new vscode.Range(
-        new vscode.Position(
-          args.componentClassRange.start.line,
-          args.componentClassRange.start.character
-        ),
-        new vscode.Position(
-          args.componentClassRange.end.line,
-          args.componentClassRange.end.character
-        )
-      );
+      // Deserialize the plain object range or array back into a vscode.Range
+      let componentClassRange: vscode.Range;
+      if (
+        Array.isArray(args.componentClassRange) &&
+        args.componentClassRange.length === 2 &&
+        typeof args.componentClassRange[0]?.line === "number" &&
+        typeof args.componentClassRange[0]?.character === "number" &&
+        typeof args.componentClassRange[1]?.line === "number" &&
+        typeof args.componentClassRange[1]?.character === "number"
+      ) {
+        // Format: [{ line, character }, { line, character }]
+        componentClassRange = new vscode.Range(
+          new vscode.Position(
+            args.componentClassRange[0].line,
+            args.componentClassRange[0].character
+          ),
+          new vscode.Position(
+            args.componentClassRange[1].line,
+            args.componentClassRange[1].character
+          )
+        );
+      } else {
+        // Fallback: treat as object with .start/.end
+        componentClassRange = new vscode.Range(
+          new vscode.Position(
+            args.componentClassRange.start.line,
+            args.componentClassRange.start.character
+          ),
+          new vscode.Position(
+            args.componentClassRange.end.line,
+            args.componentClassRange.end.character
+          )
+        );
+      }
 
       console.log(
         `[Fast CSS Edit] Delete command invoked for: .${args.className} in ${styleUri.fsPath} and class in ${componentUri.fsPath}`
@@ -77,10 +100,10 @@ export function activate(context: vscode.ExtensionContext) {
           args.className
         }" from ${path.basename(componentUri.fsPath)}?`,
         { modal: true },
-        "Yes, Delete Both"
+        "Yes, Remove Both"
       );
 
-      if (confirmation === "Yes, Delete Both") {
+      if (confirmation === "Yes, Remove Both") {
         let ruleDeleted = false;
         let classRemoved = false;
         try {
@@ -211,208 +234,217 @@ export function activate(context: vscode.ExtensionContext) {
   const removeClassCommand = vscode.commands.registerCommand(
     "fast-css-edit.removeClass",
     async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showInformationMessage("No active editor found.");
-        return;
-      }
-
-      const document = editor.document;
-      const position = editor.selection.active;
-      const config = vscode.workspace.getConfiguration("fast-css-edit");
-      const cssModuleIdentifier = config.get<string>(
-        "cssModuleIdentifier",
-        "styles"
-      );
-      const customRegexStr = config.get<string>("classNameExtractionRegex");
-
-      const classDetails = findClassAttributeDetails(
-        document,
-        position,
-        cssModuleIdentifier,
-        customRegexStr
-      );
-
-      if (!classDetails) {
-        vscode.window.showInformationMessage(
-          "No CSS class found at the cursor position."
-        );
-        return;
-      }
-
-      console.log(
-        `[Fast CSS Edit] Remove command initiated for: "${classDetails.className}"`
-      );
-
-      let styleFileInfo: StyleFileInfo | undefined;
-      try {
-        styleFileInfo = await findStyleFile(
-          document,
-          classDetails.className,
-          classDetails.isModule,
-          classDetails.moduleIdentifier || cssModuleIdentifier,
-          config
-        );
-      } catch (error: any) {
-        console.warn(
-          `[Fast CSS Edit] Error finding style file (proceeding with component removal attempt): ${error.message}`
-        );
-      }
-
-      let confirmation: string | undefined;
-      if (!styleFileInfo) {
-        console.log(
-          "[Fast CSS Edit] Style file not found or determined for removal. Proceeding to remove class from component only."
-        );
-        confirmation = await vscode.window.showWarningMessage(
-          `Style rule/file for ".${classDetails.className}" not found. Do you want to remove the class "${classDetails.className}" from the current file only?`,
-          { modal: true },
-          "Yes, Remove Class"
-        );
-        if (confirmation !== "Yes, Remove Class") {
-          console.log(
-            "[Fast CSS Edit] Class removal cancelled by user (style file not found)."
-          );
-          return;
-        }
-      } else {
-        confirmation = await vscode.window.showWarningMessage(
-          `Are you sure you want to remove the class "${
-            classDetails.className
-          }" from this file AND delete the rule ".${
-            styleFileInfo.className
-          }" from ${path.basename(styleFileInfo.uri.fsPath)}?`,
-          { modal: true },
-          "Yes, Remove Both"
-        );
-        if (confirmation !== "Yes, Remove Both") {
-          console.log(
-            "[Fast CSS Edit] Class and rule removal cancelled by user."
-          );
-          return;
-        }
-      }
-
-      let ruleDeletedHandled = false;
-      let classRemoved = false;
-
-      try {
-        if (styleFileInfo && confirmation === "Yes, Remove Both") {
-          try {
-            const deleted = await findAndDeleteCssRuleBlock(
-              styleFileInfo.uri,
-              styleFileInfo.className
-            );
-            if (deleted) {
-              console.log(
-                `[Fast CSS Edit] Rule ".${styleFileInfo.className}" deleted from ${styleFileInfo.uri.fsPath}`
-              );
-              ruleDeletedHandled = true;
-            } else {
-              console.log(
-                `[Fast CSS Edit] Rule ".${styleFileInfo.className}" not found in ${styleFileInfo.uri.fsPath}, but proceeding.`
-              );
-              ruleDeletedHandled = true;
-            }
-          } catch (error: any) {
-            vscode.window.showErrorMessage(
-              `Error deleting CSS rule: ${error.message}`
-            );
-            console.error(
-              "[Fast CSS Edit] Error in findAndDeleteCssRuleBlock:",
-              error
-            );
-          }
-        } else if (!styleFileInfo && confirmation === "Yes, Remove Class") {
-          ruleDeletedHandled = true;
-        }
-
-        if (ruleDeletedHandled) {
-          classRemoved = await removeClassNameFromAttribute(
-            editor,
-            classDetails
-          );
-          if (classRemoved) {
-            console.log(
-              `[Fast CSS Edit] Class "${classDetails.className}" removed from ${document.uri.fsPath}`
-            );
-          } else {
-            console.log(
-              `[Fast CSS Edit] Failed to remove class "${classDetails.className}" from component.`
-            );
-          }
-        }
-
-        if (
-          classRemoved &&
-          styleFileInfo &&
-          ruleDeletedHandled &&
-          confirmation === "Yes, Remove Both"
-        ) {
-          vscode.window.showInformationMessage(
-            `Class "${classDetails.className}" and its CSS rule deleted.`
-          );
-        } else if (
-          classRemoved &&
-          !styleFileInfo &&
-          ruleDeletedHandled &&
-          confirmation === "Yes, Remove Class"
-        ) {
-          vscode.window.showInformationMessage(
-            `Class "${classDetails.className}" removed from the component.`
-          );
-        } else if (
-          !classRemoved &&
-          styleFileInfo &&
-          ruleDeletedHandled &&
-          confirmation === "Yes, Remove Both"
-        ) {
-          vscode.window.showWarningMessage(
-            `CSS rule for ".${styleFileInfo.className}" deleted, but failed to remove class "${classDetails.className}" from the component.`
-          );
-        } else if (!classRemoved && !ruleDeletedHandled) {
-          vscode.window.showErrorMessage(
-            `Failed to remove CSS rule. Class "${classDetails.className}" was not removed from the component.`
-          );
-        } else if (
-          classRemoved &&
-          styleFileInfo &&
-          ruleDeletedHandled &&
-          confirmation !== "Yes, Remove Both"
-        ) {
-          console.warn(
-            "[Fast CSS Edit] Inconsistent state after removal attempt."
-          );
-        } else {
-          console.warn(
-            `[Fast CSS Edit] Could not complete the removal process for "${classDetails.className}". Class removed: ${classRemoved}, Rule handled: ${ruleDeletedHandled}`
-          );
-          if (
-            confirmation === "Yes, Remove Both" ||
-            confirmation === "Yes, Remove Class"
-          ) {
-            vscode.window.showWarningMessage(
-              `Could not complete the removal process for "${classDetails.className}".`
-            );
-          }
-        }
-      } catch (error: any) {
-        vscode.window.showErrorMessage(
-          `Error removing class: ${error.message}`
-        );
-        console.error(
-          "[Fast CSS Edit] Error during removeClass command:",
-          error
-        );
-      }
+      await handleDeleteRuleAndClass();
     }
   );
+
+  // Register the new context menu command
+  const deleteRuleAndClassCommand = vscode.commands.registerCommand(
+    "fast-css-edit.deleteRuleAndClass",
+    async () => {
+      await handleDeleteRuleAndClass();
+    }
+  );
+
+  // Shared logic for both removeClass and deleteRuleAndClass
+  async function handleDeleteRuleAndClass() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showInformationMessage("No active editor found.");
+      return;
+    }
+
+    const document = editor.document;
+    const position = editor.selection.active;
+    const config = vscode.workspace.getConfiguration("fast-css-edit");
+    const cssModuleIdentifier = config.get<string>(
+      "cssModuleIdentifier",
+      "styles"
+    );
+    const customRegexStr = config.get<string>("classNameExtractionRegex");
+
+    const classDetails = findClassAttributeDetails(
+      document,
+      position,
+      cssModuleIdentifier,
+      customRegexStr
+    );
+
+    if (!classDetails) {
+      vscode.window.showInformationMessage(
+        "No CSS class found at the cursor position."
+      );
+      return;
+    }
+
+    console.log(
+      `[Fast CSS Edit] Delete rule & class command initiated for: "${classDetails.className}"`
+    );
+
+    let styleFileInfo: StyleFileInfo | undefined;
+    try {
+      styleFileInfo = await findStyleFile(
+        document,
+        classDetails.className,
+        classDetails.isModule,
+        classDetails.moduleIdentifier || cssModuleIdentifier,
+        config
+      );
+    } catch (error: any) {
+      console.warn(
+        `[Fast CSS Edit] Error finding style file (proceeding with component removal attempt): ${error.message}`
+      );
+    }
+
+    let confirmation: string | undefined;
+    if (!styleFileInfo) {
+      console.log(
+        "[Fast CSS Edit] Style file not found or determined for removal. Proceeding to remove class from component only."
+      );
+      confirmation = await vscode.window.showWarningMessage(
+        `Style rule/file for ".${classDetails.className}" not found. Do you want to remove the class "${classDetails.className}" from the current file only?`,
+        { modal: true },
+        "Yes, Remove Class"
+      );
+      if (confirmation !== "Yes, Remove Class" && confirmation !== undefined) {
+        console.log(
+          "[Fast CSS Edit] Class removal cancelled by user (style file not found)."
+        );
+        return;
+      }
+    } else {
+      confirmation = await vscode.window.showWarningMessage(
+        `Are you sure you want to remove the class "${
+          classDetails.className
+        }" from this file AND delete the rule ".${
+          styleFileInfo.className
+        }" from ${path.basename(styleFileInfo.uri.fsPath)}?`,
+        { modal: true },
+        "Yes, Remove Both"
+      );
+      if (confirmation !== "Yes, Remove Both" && confirmation !== undefined) {
+        console.log(
+          "[Fast CSS Edit] Class and rule removal cancelled by user."
+        );
+        return;
+      }
+    }
+
+    let ruleDeletedHandled = false;
+    let classRemoved = false;
+
+    try {
+      if (styleFileInfo && confirmation === "Yes, Remove Both") {
+        try {
+          const deleted = await findAndDeleteCssRuleBlock(
+            styleFileInfo.uri,
+            styleFileInfo.className
+          );
+          if (deleted) {
+            console.log(
+              `[Fast CSS Edit] Rule ".${styleFileInfo.className}" deleted from ${styleFileInfo.uri.fsPath}`
+            );
+            ruleDeletedHandled = true;
+          } else {
+            console.log(
+              `[Fast CSS Edit] Rule ".${styleFileInfo.className}" not found in ${styleFileInfo.uri.fsPath}, but proceeding.`
+            );
+            ruleDeletedHandled = true;
+          }
+        } catch (error: any) {
+          vscode.window.showErrorMessage(
+            `Error deleting CSS rule: ${error.message}`
+          );
+          console.error(
+            "[Fast CSS Edit] Error in findAndDeleteCssRuleBlock:",
+            error
+          );
+        }
+      } else if (!styleFileInfo && confirmation === "Yes, Remove Class") {
+        ruleDeletedHandled = true;
+      }
+
+      if (ruleDeletedHandled) {
+        classRemoved = await removeClassNameFromAttribute(editor, classDetails);
+        if (classRemoved) {
+          console.log(
+            `[Fast CSS Edit] Class "${classDetails.className}" removed from ${document.uri.fsPath}`
+          );
+        } else {
+          console.log(
+            `[Fast CSS Edit] Failed to remove class "${classDetails.className}" from component.`
+          );
+        }
+      }
+
+      if (
+        classRemoved &&
+        styleFileInfo &&
+        ruleDeletedHandled &&
+        confirmation === "Yes, Remove Both"
+      ) {
+        vscode.window.showInformationMessage(
+          `Class "${classDetails.className}" and its CSS rule deleted.`
+        );
+      } else if (
+        classRemoved &&
+        !styleFileInfo &&
+        ruleDeletedHandled &&
+        confirmation === "Yes, Remove Class"
+      ) {
+        vscode.window.showInformationMessage(
+          `Class "${classDetails.className}" removed from the component.`
+        );
+      } else if (
+        !classRemoved &&
+        styleFileInfo &&
+        ruleDeletedHandled &&
+        confirmation === "Yes, Remove Both"
+      ) {
+        vscode.window.showWarningMessage(
+          `CSS rule for ".${styleFileInfo.className}" deleted, but failed to remove class "${classDetails.className}" from the component.`
+        );
+      } else if (!classRemoved && !ruleDeletedHandled) {
+        vscode.window.showErrorMessage(
+          `Failed to remove CSS rule. Class "${classDetails.className}" was not removed from the component.`
+        );
+      } else if (
+        classRemoved &&
+        styleFileInfo &&
+        ruleDeletedHandled &&
+        confirmation !== "Yes, Remove Both"
+      ) {
+        console.warn(
+          "[Fast CSS Edit] Inconsistent state after removal attempt."
+        );
+      } else {
+        console.warn(
+          `[Fast CSS Edit] Could not complete the removal process for "${classDetails.className}". Class removed: ${classRemoved}, Rule handled: ${ruleDeletedHandled}`
+        );
+        if (
+          confirmation === "Yes, Remove Both" ||
+          confirmation === "Yes, Remove Class"
+        ) {
+          vscode.window.showWarningMessage(
+            `Could not complete the removal process for "${classDetails.className}".`
+          );
+        }
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Error removing class: ${error.message}`);
+      console.error(
+        "[Fast CSS Edit] Error during deleteRuleAndClass command:",
+        error
+      );
+    }
+  }
 
   context.subscriptions.push(
     definitionProvider,
     hoverProvider,
     deleteCommand,
-    removeClassCommand
+    removeClassCommand,
+    deleteRuleAndClassCommand
   );
 
   context.subscriptions.push(
@@ -424,6 +456,8 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
+import { calculateRangeToDeleteClass } from "./utils";
+
 async function removeClassNameFromAttribute(
   editor: vscode.TextEditor,
   classDetails: ClassAttributeDetails
@@ -433,39 +467,7 @@ async function removeClassNameFromAttribute(
       const document = editor.document;
       const classRange = classDetails.range;
 
-      let rangeToDelete = classRange;
-      let removedSpace = false;
-
-      if (classRange.start.character > 0) {
-        const charBeforePos = classRange.start.translate(0, -1);
-        const rangeBefore = new vscode.Range(charBeforePos, classRange.start);
-        if (document.getText(rangeBefore) === " ") {
-          rangeToDelete = new vscode.Range(rangeBefore.start, classRange.end);
-          removedSpace = true;
-          console.log("[Fast CSS Edit] Including preceding space in deletion.");
-        }
-      }
-
-      if (!removedSpace) {
-        const charAfterPos = classRange.end;
-        const rangeAfter = new vscode.Range(
-          charAfterPos,
-          charAfterPos.translate(0, 1)
-        );
-        if (
-          rangeAfter.end.isBeforeOrEqual(
-            document.lineAt(rangeAfter.end.line).range.end
-          )
-        ) {
-          if (document.getText(rangeAfter) === " ") {
-            rangeToDelete = new vscode.Range(classRange.start, rangeAfter.end);
-            removedSpace = true;
-            console.log(
-              "[Fast CSS Edit] Including trailing space in deletion."
-            );
-          }
-        }
-      }
+      const rangeToDelete = calculateRangeToDeleteClass(document, classRange);
 
       console.log(
         `[Fast CSS Edit] Attempting to delete range in component: Line ${rangeToDelete.start.line}, Chars ${rangeToDelete.start.character}-${rangeToDelete.end.character}`
@@ -533,6 +535,53 @@ class CssDefinitionProvider implements vscode.DefinitionProvider {
         return undefined;
       }
 
+      // Insert import statement if missing
+      try {
+        const editor = await vscode.window.showTextDocument(document, {
+          preview: false,
+        });
+        let importPath = path
+          .relative(path.dirname(document.uri.fsPath), styleFileInfo.uri.fsPath)
+          .replace(/\\/g, "/");
+        if (!importPath.startsWith(".") && !importPath.startsWith("/")) {
+          importPath = "./" + importPath;
+        }
+        const isModule = styleFileInfo.isModule || false;
+        const importRegexModule = new RegExp(
+          `import\\s+\\w+\\s+from\\s+['"](?:\\.\\/)?${importPath.replace(
+            /^\.\//,
+            ""
+          )}['"]`
+        );
+        const importRegexRegular = new RegExp(
+          `import\\s+['"](?:\\.\\/)?${importPath.replace(/^\.\//, "")}['"]`
+        );
+        const text = document.getText();
+
+        if (isModule) {
+          if (!importRegexModule.test(text)) {
+            // Insert import styles from "./button.module.css";
+            const importStatement = `import styles from "${importPath}";\n`;
+            await editor.edit((editBuilder) => {
+              editBuilder.insert(new vscode.Position(0, 0), importStatement);
+            });
+          }
+        } else {
+          if (!importRegexRegular.test(text)) {
+            // Insert import "./button.css";
+            const importStatement = `import "${importPath}";\n`;
+            await editor.edit((editBuilder) => {
+              editBuilder.insert(new vscode.Position(0, 0), importStatement);
+            });
+          }
+        }
+      } catch (importError) {
+        console.error(
+          "[Fast CSS Edit] Error inserting import statement:",
+          importError
+        );
+      }
+
       console.log(
         `[Fast CSS Edit] Returning definition location: ${styleFileInfo.uri.fsPath} at range ${targetRange.start.line}:${targetRange.start.character}`
       );
@@ -570,6 +619,11 @@ class CssHoverProvider implements vscode.HoverProvider {
       return undefined;
     }
 
+    // If the class is from a local JS object, do not show hover
+    if (classDetails.isLocalObject) {
+      return undefined;
+    }
+
     const styleFileInfo = await findStyleFile(
       document,
       classDetails.className,
@@ -589,44 +643,40 @@ class CssHoverProvider implements vscode.HoverProvider {
       return undefined;
     }
 
+    // If no CSS rule content found, do not show hover
+    if (!ruleContent) {
+      return undefined;
+    }
+
     const markdown = new vscode.MarkdownString("", true);
     markdown.supportHtml = true;
     markdown.isTrusted = true;
 
-    if (ruleContent) {
-      const lang = path.extname(styleFileInfo.uri.fsPath).substring(1) || "css";
-      const maxLines = 10;
-      const lines = ruleContent.split("\n");
-      let displayContent = ruleContent;
-      if (lines.length > maxLines) {
-        displayContent = lines.slice(0, maxLines).join("\n") + "\n...";
-      }
-      markdown.appendCodeblock(displayContent, lang);
-      markdown.appendMarkdown("\n\n");
-
-      const deleteArgsObj = {
-        styleUriFsPath: styleFileInfo.uri.fsPath,
-        className: classDetails.className, // Use the class name found in the component
-        componentUriFsPath: document.uri.fsPath,
-        componentClassRange: classDetails.range,
-      };
-      const deleteArgs = encodeURIComponent(JSON.stringify(deleteArgsObj));
-      const deleteCommandUri = vscode.Uri.parse(
-        `command:fast-css-edit.deleteCssRule?${deleteArgs}`
-      );
-
-      // Use the component's class name for the tooltip
-      markdown.appendMarkdown(
-        `[🗑️ Delete Rule & Class](${deleteCommandUri} "Delete the CSS rule for .${styleFileInfo.className} and remove '${classDetails.className}' from this file")`
-      );
-    } else {
-      markdown.appendText(
-        `CSS rule for ".${classDetails.className}" not found in ${path.basename(
-          styleFileInfo.uri.fsPath
-        )}.`
-      );
-      markdown.appendMarkdown("\n\n");
+    const lang = path.extname(styleFileInfo.uri.fsPath).substring(1) || "css";
+    const maxLines = 10;
+    const lines = ruleContent.split("\n");
+    let displayContent = ruleContent;
+    if (lines.length > maxLines) {
+      displayContent = lines.slice(0, maxLines).join("\n") + "\n...";
     }
+    markdown.appendCodeblock(displayContent, lang);
+    markdown.appendMarkdown("\n\n");
+
+    const deleteArgsObj = {
+      styleUriFsPath: styleFileInfo.uri.fsPath,
+      className: classDetails.className, // Use the class name found in the component
+      componentUriFsPath: document.uri.fsPath,
+      componentClassRange: classDetails.range,
+    };
+    const deleteArgs = encodeURIComponent(JSON.stringify(deleteArgsObj));
+    const deleteCommandUri = vscode.Uri.parse(
+      `command:fast-css-edit.deleteCssRule?${deleteArgs}`
+    );
+
+    // Use the component's class name for the tooltip
+    markdown.appendMarkdown(
+      `[🗑️ Delete Rule & Class](${deleteCommandUri} "Delete the CSS rule for .${styleFileInfo.className} and remove '${classDetails.className}' from this file")`
+    );
 
     return new vscode.Hover(markdown, classDetails.range);
   }
