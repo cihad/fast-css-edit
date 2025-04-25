@@ -2,6 +2,8 @@
 
 Fast CSS Edit is a Visual Studio Code extension designed to streamline and simplify the process of editing CSS class definitions directly from React component files. It enables developers to quickly navigate and modify CSS styles associated with class names in JSX or TSX files without switching between multiple files.
 
+![Demo](demo.gif)
+
 ## Features
 
 - **Direct CSS Editing from React Components**  
