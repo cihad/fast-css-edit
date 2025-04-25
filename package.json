@@ -2,7 +2,7 @@
   "name": "fast-css-edit",
   "displayName": "Fast CSS Edit",
   "description": "Quickly view and edit CSS declarations in a popup by hovering or clicking on className attributes in React files. Boost your workflow with instant style previews!",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "keyx",
   "repository": {
     "type": "git",
@@ -109,7 +109,8 @@
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/vscode": "^1.99.0",
