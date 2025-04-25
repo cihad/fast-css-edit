@@ -3,6 +3,11 @@
   "displayName": "Fast CSS Edit",
   "description": "Quickly view and edit CSS declarations in a popup by hovering or clicking on className attributes in React files. Boost your workflow with instant style previews!",
   "version": "0.0.1",
+  "publisher": "keyx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keyx-dev/fast-css-edit"
+  },
   "engines": {
     "vscode": "^1.99.0"
   },
