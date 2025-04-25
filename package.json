@@ -24,6 +24,7 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "icon": "fast-css-edit-logo.png",
     "configuration": {
       "title": "Fast CSS Edit",
       "properties": {
