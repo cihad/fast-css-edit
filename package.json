@@ -8,6 +8,7 @@
     "type": "git",
     "url": "https://github.com/keyx-dev/fast-css-edit"
   },
+  "preview": true,
   "engines": {
     "vscode": "^1.99.0"
   },
@@ -22,9 +23,8 @@
     "onLanguage:html",
     "onCommand:fast-css-edit.deleteCssRule"
   ],
-  "main": "./dist/extension.js",
+  "icon": "fast-css-edit-logo.png",
   "contributes": {
-    "icon": "fast-css-edit-logo.png",
     "configuration": {
       "title": "Fast CSS Edit",
       "properties": {
@@ -98,6 +98,7 @@
       }
     ]
   },
+  "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "pnpm run package",
     "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
